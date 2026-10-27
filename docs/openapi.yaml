@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: LazyLegs – Destination Dispatch REST API
-  version: 0.1.0-draft
+  version: 0.2.0-draft
   description: |
     Προδιαγραφή διεπαφών REST για το σύστημα προεπιλογής προορισμού ανελκυστήρων.
     Το σύστημα αποτελείται από τέσσερα ανεξάρτητα εκτελέσιμα, το καθένα με δικό του REST server:
@@ -15,10 +15,36 @@ info:
 
     Κανόνες για όλα τα υποσυστήματα:
     - Όλα τα σώματα είναι JSON (Content-Type: application/json, UTF-8).
-    - Οι όροφοι είναι ακέραιοι. Ο χαμηλότερος όροφος δίνεται από το GET /api/config.
+    - Οι όροφοι είναι ακέραιοι. Το ισόγειο είναι ο όροφος 0 και δεν υπάρχουν υπόγεια,
+      άρα οι όροφοι είναι 0 έως highestFloor (από GET /api/config).
     - Οι ανελκυστήρες αναγνωρίζονται με ένα κεφαλαίο γράμμα, A έως T (2–20 ανελκυστήρες).
     - Οι χρόνοι είναι ISO-8601 σε UTC, π.χ. 2026-11-04T10:15:30.250Z.
     - Κάθε σφάλμα επιστρέφεται με το σχήμα Error.
+
+    Παράμετροι γραμμής εντολών:
+
+    | Υποσύστημα   | Εντολή |
+    |--------------|--------|
+    | Κεντρικό     | java -jar central.jar --floors 30 --elevators 4 [--port 8080] |
+    | Ανελκυστήρας | java -jar elevator.jar --id C --central http://localhost:8080 [--evaluation http://localhost:9000] [--port 8103] |
+    | Οθόνη ορόφου | java -jar ui.jar --floor 0 --central http://localhost:8080 [--port 7001] |
+    | Αξιολόγηση   | java -jar evaluation.jar --scenario morning-rush.json --central http://localhost:8080 [--port 9000] |
+
+    Ο ανελκυστήρας στέλνει events στην αξιολόγηση μόνο αν δοθεί το --evaluation.
+
+    Αρχείο σεναρίου αξιολόγησης (ΠΡΟΣΧΕΔΙΟ, οριστικοποιείται με το πρωτόκολλο αξιολόγησης, 2/12):
+
+    ```json
+    {
+      "name": "morning-rush",
+      "dispatchStrategy": "GROUP_BY_DESTINATION",
+      "passengers": [
+        { "atSecond": 0.0, "from": 0, "to": 12 },
+        { "atSecond": 1.5, "from": 0, "to": 7 }
+      ]
+    }
+    ```
+    atSecond: δευτερόλεπτα από την έναρξη του σεναρίου που εμφανίζεται ο επιβάτης.
 
     ΠΡΟΣΧΕΔΙΟ: τα ονόματα πεδίων και διαδρομών είναι προς συμφωνία με την ομάδα συνεργασίας.
 
@@ -36,7 +62,10 @@ tags:
   - name: central
     description: Εκτίθεται από το κεντρικό σύστημα ελέγχου
   - name: elevator
-    description: Εκτίθεται από το σύστημα ελέγχου κάθε ανελκυστήρα
+    description: |
+      Εκτίθεται από το σύστημα ελέγχου κάθε ανελκυστήρα.
+      Ο κινητήρας, οι πόρτες και η οθόνη του θαλάμου υλοποιούνται προς το παρόν ως εσωτερικά
+      μέρη του ανελκυστήρα, χωρίς δική τους διεπαφή REST (ανοιχτό ερώτημα προς τον διδάσκοντα).
   - name: ui
     description: Εκτίθεται από τη διεπαφή χρήστη κάθε ορόφου
   - name: evaluation
@@ -154,7 +183,8 @@ paths:
               schema: { $ref: '#/components/schemas/Error' }
     get:
       tags: [central]
-      summary: Κατάσταση όλων των ανελκυστήρων
+      summary: Κατάσταση και διεύθυνση όλων των ανελκυστήρων
+      description: Χρησιμοποιείται π.χ. από το σύστημα αξιολόγησης για να ρυθμίσει κάθε ανελκυστήρα (PUT /elevator/config στο url του).
       operationId: listElevators
       responses:
         '200':
@@ -163,7 +193,7 @@ paths:
             application/json:
               schema:
                 type: array
-                items: { $ref: '#/components/schemas/ElevatorStatus' }
+                items: { $ref: '#/components/schemas/ElevatorInfo' }
 
   /api/elevators/{elevatorId}/status:
     post:
@@ -202,7 +232,7 @@ paths:
       summary: Εντολή στάσης από το κεντρικό σύστημα
       description: |
         Το κεντρικό σύστημα προσθέτει στο πρόγραμμα του ανελκυστήρα παραλαβή και αποβίβαση επιβάτη.
-        Ο ανελκυστήρας αποφασίζει τη σειρά των στάσεων κατά την κίνησή του.
+        Τη σειρά των στάσεων την αποφασίζει ο ίδιος ο ανελκυστήρας κατά την κίνησή του.
       operationId: addStop
       requestBody:
         required: true
@@ -270,6 +300,8 @@ paths:
       description: |
         Κάθε ανελκυστήρας αναφέρει παραλαβές, αποβιβάσεις και κινήσεις.
         Από αυτά υπολογίζονται χρόνος αναμονής, χρόνος διαδρομής και αριθμός στάσεων.
+        Οι χρόνοι αναμονής μετρώνται μόνο για αιτήματα που έστειλε το ίδιο το σύστημα αξιολόγησης
+        από το σενάριό του, γιατί μόνο για αυτά γνωρίζει τη στιγμή δημιουργίας.
       operationId: postEvent
       requestBody:
         required: true
@@ -341,15 +373,15 @@ components:
       type: object
       required: [lowestFloor, highestFloor, elevators]
       properties:
-        lowestFloor:  { type: integer, example: 0 }
-        highestFloor: { type: integer, example: 30 }
+        lowestFloor:  { type: integer, minimum: 0, maximum: 0, example: 0, description: 'Πάντα 0 (ισόγειο, χωρίς υπόγεια)' }
+        highestFloor: { type: integer, minimum: 2, maximum: 199, example: 30 }
         elevators:
           type: array
           minItems: 2
           maxItems: 20
           items: { $ref: '#/components/schemas/ElevatorLetter' }
           example: [A, B, C, D]
-      description: Από 3 έως 200 όροφοι συνολικά (highestFloor − lowestFloor + 1).
+      description: Από 3 έως 200 όροφοι συνολικά (0 έως highestFloor).
 
     OperationParams:
       type: object
@@ -413,6 +445,14 @@ components:
           type: array
           items: { type: integer }
           example: [7, 12]
+
+    ElevatorInfo:
+      allOf:
+        - $ref: '#/components/schemas/ElevatorStatus'
+        - type: object
+          required: [url]
+          properties:
+            url: { type: string, format: uri, example: 'http://localhost:8103' }
 
     StopCommand:
       type: object
