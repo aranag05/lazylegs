@@ -1,0 +1,475 @@
+openapi: 3.0.3
+info:
+  title: LazyLegs – Destination Dispatch REST API
+  version: 0.1.0-draft
+  description: |
+    Προδιαγραφή διεπαφών REST για το σύστημα προεπιλογής προορισμού ανελκυστήρων.
+    Το σύστημα αποτελείται από τέσσερα ανεξάρτητα εκτελέσιμα, το καθένα με δικό του REST server:
+
+    | Υποσύστημα            | Πρόθεμα διαδρομών | Προεπιλεγμένη θύρα |
+    |-----------------------|-------------------|--------------------|
+    | Κεντρικό σύστημα      | /api              | 8080               |
+    | Ανελκυστήρας (ένας ανά γράμμα) | /elevator | 8101, 8102, …   |
+    | Διεπαφή χρήστη (μία ανά όροφο) | /ui      | 7001, 7002, …   |
+    | Σύστημα αξιολόγησης   | /eval             | 9000               |
+
+    Κανόνες για όλα τα υποσυστήματα:
+    - Όλα τα σώματα είναι JSON (Content-Type: application/json, UTF-8).
+    - Οι όροφοι είναι ακέραιοι. Ο χαμηλότερος όροφος δίνεται από το GET /api/config.
+    - Οι ανελκυστήρες αναγνωρίζονται με ένα κεφαλαίο γράμμα, A έως T (2–20 ανελκυστήρες).
+    - Οι χρόνοι είναι ISO-8601 σε UTC, π.χ. 2026-11-04T10:15:30.250Z.
+    - Κάθε σφάλμα επιστρέφεται με το σχήμα Error.
+
+    ΠΡΟΣΧΕΔΙΟ: τα ονόματα πεδίων και διαδρομών είναι προς συμφωνία με την ομάδα συνεργασίας.
+
+servers:
+  - url: http://localhost:8080
+    description: Κεντρικό σύστημα ελέγχου
+  - url: http://localhost:8101
+    description: Ανελκυστήρας A (ένας server ανά ανελκυστήρα)
+  - url: http://localhost:7001
+    description: Διεπαφή χρήστη ορόφου (ένας server ανά οθόνη)
+  - url: http://localhost:9000
+    description: Σύστημα αξιολόγησης
+
+tags:
+  - name: central
+    description: Εκτίθεται από το κεντρικό σύστημα ελέγχου
+  - name: elevator
+    description: Εκτίθεται από το σύστημα ελέγχου κάθε ανελκυστήρα
+  - name: ui
+    description: Εκτίθεται από τη διεπαφή χρήστη κάθε ορόφου
+  - name: evaluation
+    description: Εκτίθεται από το σύστημα αξιολόγησης
+
+paths:
+
+  # ─────────────────────────── ΚΕΝΤΡΙΚΟ ΣΥΣΤΗΜΑ ───────────────────────────
+
+  /api/config:
+    get:
+      tags: [central]
+      summary: Διαμόρφωση κτιρίου
+      description: Καλείται από όλα τα υποσυστήματα κατά την εκκίνηση.
+      operationId: getConfig
+      responses:
+        '200':
+          description: Η τρέχουσα διαμόρφωση
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BuildingConfig' }
+    put:
+      tags: [central]
+      summary: Αλλαγή παραμέτρων λειτουργίας
+      description: Χρησιμοποιείται κυρίως από το σύστημα αξιολόγησης πριν από ένα σενάριο.
+      operationId: updateConfig
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OperationParams' }
+      responses:
+        '200':
+          description: Η νέα διαμόρφωση
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BuildingConfig' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /api/requests:
+    post:
+      tags: [central]
+      summary: Νέο αίτημα μετακίνησης επιβάτη
+      description: |
+        Καλείται από τη διεπαφή χρήστη όταν ο επιβάτης δηλώσει όροφο προορισμού,
+        ή από το σύστημα αξιολόγησης όταν προσομοιώνει επιβάτες.
+        Το κεντρικό σύστημα αναθέτει ανελκυστήρα και του στέλνει POST /elevator/stops.
+      operationId: createRequest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PassengerRequest' }
+            example: { sourceFloor: 0, destinationFloor: 12 }
+      responses:
+        '201':
+          description: Το αίτημα καταχωρήθηκε και ανατέθηκε
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Assignment' }
+              example: { requestId: r-1042, elevator: C }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /api/requests/{requestId}:
+    get:
+      tags: [central]
+      summary: Κατάσταση αιτήματος
+      operationId: getRequest
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '200':
+          description: Το αίτημα
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RequestStatus' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/displays:
+    post:
+      tags: [central]
+      summary: Εγγραφή οθόνης ορόφου
+      description: Η διεπαφή χρήστη δηλώνει σε ποιον όροφο βρίσκεται και πού δέχεται ειδοποιήσεις.
+      operationId: registerDisplay
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DisplayRegistration' }
+            example: { floor: 0, callbackUrl: 'http://localhost:7001' }
+      responses:
+        '204': { description: Η οθόνη καταχωρήθηκε }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /api/elevators:
+    post:
+      tags: [central]
+      summary: Εγγραφή ανελκυστήρα
+      description: Ο ελεγκτής ανελκυστήρα δηλώνει το γράμμα του και τη διεύθυνσή του κατά την εκκίνηση.
+      operationId: registerElevator
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ElevatorRegistration' }
+            example: { id: A, url: 'http://localhost:8101' }
+      responses:
+        '204': { description: Ο ανελκυστήρας καταχωρήθηκε }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409':
+          description: Το γράμμα χρησιμοποιείται ήδη
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+    get:
+      tags: [central]
+      summary: Κατάσταση όλων των ανελκυστήρων
+      operationId: listElevators
+      responses:
+        '200':
+          description: Λίστα καταστάσεων
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ElevatorStatus' }
+
+  /api/elevators/{elevatorId}/status:
+    post:
+      tags: [central]
+      summary: Αναφορά κατάστασης από ανελκυστήρα
+      description: Ο ανελκυστήρας στέλνει την κατάστασή του σε κάθε αλλαγή (όροφος, πόρτες, κατεύθυνση).
+      operationId: reportElevatorStatus
+      parameters:
+        - $ref: '#/components/parameters/ElevatorId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ElevatorStatus' }
+      responses:
+        '204': { description: Η κατάσταση καταγράφηκε }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ─────────────────────────── ΑΝΕΛΚΥΣΤΗΡΑΣ ───────────────────────────
+
+  /elevator/status:
+    get:
+      tags: [elevator]
+      summary: Τρέχουσα κατάσταση του ανελκυστήρα
+      operationId: getElevatorStatus
+      responses:
+        '200':
+          description: Η κατάσταση
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ElevatorStatus' }
+
+  /elevator/stops:
+    post:
+      tags: [elevator]
+      summary: Εντολή στάσης από το κεντρικό σύστημα
+      description: |
+        Το κεντρικό σύστημα προσθέτει στο πρόγραμμα του ανελκυστήρα παραλαβή και αποβίβαση επιβάτη.
+        Ο ανελκυστήρας αποφασίζει τη σειρά των στάσεων κατά την κίνησή του.
+      operationId: addStop
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StopCommand' }
+            example: { requestId: r-1042, pickupFloor: 0, dropoffFloor: 12 }
+      responses:
+        '202': { description: Η εντολή έγινε δεκτή }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /elevator/config:
+    put:
+      tags: [elevator]
+      summary: Παράμετροι λειτουργίας του ανελκυστήρα
+      operationId: updateElevatorConfig
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ElevatorParams' }
+      responses:
+        '200':
+          description: Οι νέες παράμετροι
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ElevatorParams' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  # ─────────────────────────── ΔΙΕΠΑΦΗ ΧΡΗΣΤΗ ───────────────────────────
+
+  /ui/assignments:
+    post:
+      tags: [ui]
+      summary: Αλλαγή ανάθεσης ανελκυστήρα
+      description: Το κεντρικό σύστημα ειδοποιεί την οθόνη ότι ένα αίτημα ανατέθηκε σε άλλον ανελκυστήρα.
+      operationId: notifyAssignment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Assignment' }
+      responses:
+        '204': { description: Η οθόνη ενημερώθηκε }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /ui/health:
+    get:
+      tags: [ui]
+      summary: Έλεγχος λειτουργίας οθόνης
+      operationId: uiHealth
+      responses:
+        '200':
+          description: Η οθόνη λειτουργεί
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Health' }
+
+  # ─────────────────────────── ΑΞΙΟΛΟΓΗΣΗ ───────────────────────────
+
+  /eval/events:
+    post:
+      tags: [evaluation]
+      summary: Συμβάν από ανελκυστήρα
+      description: |
+        Κάθε ανελκυστήρας αναφέρει παραλαβές, αποβιβάσεις και κινήσεις.
+        Από αυτά υπολογίζονται χρόνος αναμονής, χρόνος διαδρομής και αριθμός στάσεων.
+      operationId: postEvent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ElevatorEvent' }
+            example:
+              elevator: C
+              type: PICKUP
+              floor: 0
+              requestId: r-1042
+              timestamp: '2026-11-04T10:15:30.250Z'
+      responses:
+        '204': { description: Το συμβάν καταγράφηκε }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /eval/results:
+    get:
+      tags: [evaluation]
+      summary: Αποτελέσματα του τρέχοντος ή του τελευταίου σεναρίου
+      operationId: getResults
+      responses:
+        '200':
+          description: Οι μετρήσεις
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EvaluationResults' }
+
+components:
+
+  parameters:
+    RequestId:
+      name: requestId
+      in: path
+      required: true
+      schema: { type: string, example: r-1042 }
+    ElevatorId:
+      name: elevatorId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/ElevatorLetter' }
+
+  responses:
+    BadRequest:
+      description: Μη έγκυρα δεδομένα, π.χ. όροφος εκτός ορίων
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: FLOOR_OUT_OF_RANGE, message: 'Ο όροφος 45 δεν υπάρχει (0–30)' }
+    NotFound:
+      description: Δεν βρέθηκε
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unavailable:
+      description: Το υποσύστημα δεν μπορεί να εξυπηρετήσει αυτή τη στιγμή
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+
+    ElevatorLetter:
+      type: string
+      pattern: '^[A-T]$'
+      example: C
+
+    BuildingConfig:
+      type: object
+      required: [lowestFloor, highestFloor, elevators]
+      properties:
+        lowestFloor:  { type: integer, example: 0 }
+        highestFloor: { type: integer, example: 30 }
+        elevators:
+          type: array
+          minItems: 2
+          maxItems: 20
+          items: { $ref: '#/components/schemas/ElevatorLetter' }
+          example: [A, B, C, D]
+      description: Από 3 έως 200 όροφοι συνολικά (highestFloor − lowestFloor + 1).
+
+    OperationParams:
+      type: object
+      properties:
+        dispatchStrategy:
+          type: string
+          enum: [NEAREST_CAR, GROUP_BY_DESTINATION]
+          example: GROUP_BY_DESTINATION
+        maxPassengersPerTrip: { type: integer, minimum: 1, example: 8 }
+
+    PassengerRequest:
+      type: object
+      required: [sourceFloor, destinationFloor]
+      properties:
+        sourceFloor:      { type: integer, example: 0 }
+        destinationFloor: { type: integer, example: 12 }
+      description: sourceFloor και destinationFloor πρέπει να διαφέρουν και να είναι εντός ορίων.
+
+    Assignment:
+      type: object
+      required: [requestId, elevator]
+      properties:
+        requestId: { type: string, example: r-1042 }
+        elevator:  { $ref: '#/components/schemas/ElevatorLetter' }
+
+    RequestStatus:
+      allOf:
+        - $ref: '#/components/schemas/PassengerRequest'
+        - $ref: '#/components/schemas/Assignment'
+        - type: object
+          required: [state]
+          properties:
+            state:
+              type: string
+              enum: [WAITING, IN_CAR, DELIVERED]
+
+    DisplayRegistration:
+      type: object
+      required: [floor, callbackUrl]
+      properties:
+        floor:       { type: integer, example: 0 }
+        callbackUrl: { type: string, format: uri, example: 'http://localhost:7001' }
+
+    ElevatorRegistration:
+      type: object
+      required: [id, url]
+      properties:
+        id:  { $ref: '#/components/schemas/ElevatorLetter' }
+        url: { type: string, format: uri, example: 'http://localhost:8101' }
+
+    ElevatorStatus:
+      type: object
+      required: [id, floor, direction, doors, nextStops]
+      properties:
+        id:        { $ref: '#/components/schemas/ElevatorLetter' }
+        floor:     { type: integer, example: 4 }
+        direction: { type: string, enum: [UP, DOWN, IDLE] }
+        doors:     { type: string, enum: [OPEN, OPENING, CLOSED, CLOSING] }
+        passengers: { type: integer, minimum: 0, example: 3 }
+        nextStops:
+          type: array
+          items: { type: integer }
+          example: [7, 12]
+
+    StopCommand:
+      type: object
+      required: [requestId, pickupFloor, dropoffFloor]
+      properties:
+        requestId:    { type: string, example: r-1042 }
+        pickupFloor:  { type: integer, example: 0 }
+        dropoffFloor: { type: integer, example: 12 }
+
+    ElevatorParams:
+      type: object
+      properties:
+        secondsPerFloor:   { type: number, minimum: 0.1, example: 1.5 }
+        doorOpenSeconds:   { type: number, minimum: 0.5, example: 3 }
+        capacity:          { type: integer, minimum: 1, example: 10 }
+
+    ElevatorEvent:
+      type: object
+      required: [elevator, type, floor, timestamp]
+      properties:
+        elevator:  { $ref: '#/components/schemas/ElevatorLetter' }
+        type:
+          type: string
+          enum: [ARRIVED, DEPARTED, DOORS_OPENED, DOORS_CLOSED, PICKUP, DROPOFF]
+        floor:     { type: integer, example: 0 }
+        requestId:
+          type: string
+          description: Υποχρεωτικό για PICKUP και DROPOFF
+          example: r-1042
+        timestamp: { type: string, format: date-time }
+
+    EvaluationResults:
+      type: object
+      properties:
+        scenario:              { type: string, example: morning-rush }
+        requestsCompleted:     { type: integer, example: 120 }
+        avgWaitSeconds:        { type: number, example: 18.4 }
+        maxWaitSeconds:        { type: number, example: 61.0 }
+        avgTravelSeconds:      { type: number, example: 34.7 }
+        totalStops:            { type: integer, example: 212 }
+
+    Health:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [UP] }
+        floor:  { type: integer, example: 0 }
+
+    Error:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+          description: Σταθερός κωδικός, κεφαλαία με _
+          example: FLOOR_OUT_OF_RANGE
+        message:
+          type: string
+          description: Μήνυμα για άνθρωπο
+          example: 'Ο όροφος 45 δεν υπάρχει (0–30)'
