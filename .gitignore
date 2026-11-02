@@ -1,0 +1,39 @@
+# Maven build output
+target/
+
+# IntelliJ IDEA
+.idea/
+*.iml
+out/
+
+# VS Code / Eclipse
+.vscode/
+.classpath
+.project
+.settings/
+
+# Λειτουργικό σύστημα
+.DS_Store
+Thumbs.db
+EOFcat .gitignore
+git status
+
+
+cat > .gitignore << 'EOF'
+# Maven build output
+target/
+
+# IntelliJ IDEA
+.idea/
+*.iml
+out/
+
+# VS Code / Eclipse
+.vscode/
+.classpath
+.project
+.settings/
+
+# Λειτουργικό σύστημα
+.DS_Store
+Thumbs.db

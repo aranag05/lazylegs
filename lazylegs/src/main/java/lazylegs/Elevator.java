@@ -1,53 +1,45 @@
 package lazylegs;
-import java.util.Scanner;
 
+/**
+ * Ένας ανελκυστήρας, με αναγνωριστικό γράμμα (A έως T).
+ * Στην πράξη ο τρέχων όροφος έρχεται από αισθητήρες· εδώ τον κρατάμε σε μεταβλητή.
+ */
 public class Elevator {
 
-    /*
-    The current floor ID of the elevator
-    */
-    public int currentFloor(Scanner scanner) {
-        int currentFloor;
-        System.out.println("Enter current floor (3-200):");
-        
-        do { 
-            currentFloor = scanner.nextInt();
-            if (currentFloor < 3 || currentFloor > 200) { 
-                System.err.println("Choose again! The building capacity is 3 to 200 floors");
-            }
-        } while (currentFloor < 3 || currentFloor > 200); 
+    private final char id;
+    private int currentFloor;
+    private int destinationFloor;
 
+    public Elevator(char id, int startFloor) {
+        if (id < 'A' || id > 'T') {
+            throw new IllegalArgumentException("Elevator id must be A-T, got: " + id);
+        }
+        this.id = id;
+        this.currentFloor = startFloor;
+        this.destinationFloor = startFloor;
+    }
+
+    /** Το αναγνωριστικό γράμμα του ανελκυστήρα. */
+    public char getId() {
+        return id;
+    }
+
+    /** Ο όροφος στον οποίο βρίσκεται τώρα ο ανελκυστήρας. */
+    public int getCurrentFloor() {
         return currentFloor;
     }
 
-    /*
-    The destination floor ID of the elevator
-    */
-    public int destinationFloor(Scanner scanner) {
-        System.out.println("Where do you want to go? (3-200):");
-        int destinationFloor; 
-
-        do { 
-            destinationFloor = scanner.nextInt();
-            if (destinationFloor < 3 || destinationFloor > 200) {
-                System.err.println("Choose again! The building capacity is 3 to 200 floors");
-            }
-        } while (destinationFloor < 3 || destinationFloor > 200); 
-
+    /** Ο όροφος προς τον οποίο κινείται ο ανελκυστήρας. */
+    public int getDestinationFloor() {
         return destinationFloor;
     }
 
-    public static void main(String[] args) {
-        
-        String elevatorId = (args.length > 0) ? args[0] : "A";
-        System.out.println("Elevator: " + elevatorId);
+    public void setDestinationFloor(int destinationFloor) {
+        this.destinationFloor = destinationFloor;
+    }
 
-        Scanner scanner = new Scanner(System.in);
-        Elevator elevator = new Elevator();
-
-        int current = elevator.currentFloor(scanner);
-        int destination = elevator.destinationFloor(scanner);
-
-        System.out.println("Elevator " + elevatorId + " moves from floor " + current + " to floor " + destination);
+    /** true αν ο ανελκυστήρας δεν έχει κάπου να πάει. */
+    public boolean isIdle() {
+        return currentFloor == destinationFloor;
     }
 }
