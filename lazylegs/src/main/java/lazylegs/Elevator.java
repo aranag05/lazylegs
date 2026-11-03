@@ -1,9 +1,10 @@
 package lazylegs;
 
 /**
- * Ένας ανελκυστήρας, με αναγνωριστικό γράμμα (A έως T).
- * Στην πράξη ο τρέχων όροφος έρχεται από αισθητήρες· εδώ τον κρατάμε σε μεταβλητή.
- */
+An elevator, with a letter as an elevator ID (A to T)
+Inside actual elevators are used sensors, during the development of the code we are only using varables 
+*/
+
 public class Elevator {
 
     private final char id;
@@ -19,17 +20,17 @@ public class Elevator {
         this.destinationFloor = startFloor;
     }
 
-    /** Το αναγνωριστικό γράμμα του ανελκυστήρα. */
+    /** Elevator ID (letter) */
     public char getId() {
         return id;
     }
 
-    /** Ο όροφος στον οποίο βρίσκεται τώρα ο ανελκυστήρας. */
+    /** Current elevator position */
     public int getCurrentFloor() {
         return currentFloor;
     }
 
-    /** Ο όροφος προς τον οποίο κινείται ο ανελκυστήρας. */
+    /** Destination floor assigned to the elevator */
     public int getDestinationFloor() {
         return destinationFloor;
     }
