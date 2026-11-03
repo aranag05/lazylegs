@@ -1,8 +1,8 @@
 package lazylegs;
 
-/**
- * Αίτημα μετακίνησης ενός επιβάτη: από ποιον όροφο ξεκινά και πού θέλει να πάει.
- */
+/*
+Passenger request: source floor and destinaton floor
+*/
 public class PassengerRequest {
 
     private final int sourceFloor;
@@ -17,17 +17,17 @@ public class PassengerRequest {
         this.destinationFloor = destinationFloor;
     }
 
-    /** Ο όροφος από τον οποίο έγινε το αίτημα. */
+    /** Gets source floor */
     public int getSourceFloor() {
         return sourceFloor;
     }
 
-    /** Ο όροφος στον οποίο θέλει να πάει ο επιβάτης. */
+    /* Gets destination floor */
     public int getDestinationFloor() {
         return destinationFloor;
     }
 
-    /** true αν ο επιβάτης θέλει να ανέβει. */
+    /** true if passenger wants to go to higher levels in the buildng  */
     public boolean isGoingUp() {
         return destinationFloor > sourceFloor;
     }

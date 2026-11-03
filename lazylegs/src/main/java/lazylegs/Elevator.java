@@ -39,7 +39,7 @@ public class Elevator {
         this.destinationFloor = destinationFloor;
     }
 
-    /** true αν ο ανελκυστήρας δεν έχει κάπου να πάει. */
+    /** true if elevator doesn't have a destinaton floor */
     public boolean isIdle() {
         return currentFloor == destinationFloor;
     }
