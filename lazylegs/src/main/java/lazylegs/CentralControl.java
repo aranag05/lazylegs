@@ -12,7 +12,4 @@ public class CentralControl {
     Direction up = Direction.UP;
     Direction down = Direction.DOWN;
 
-
-
-
 }
