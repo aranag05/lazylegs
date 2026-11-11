@@ -1,525 +1,238 @@
 openapi: 3.0.3
 info:
-  title: LazyLegs – Destination Dispatch REST API
-  version: 0.3.0-draft
+  title: Destination Dispatch Elevators - Common REST Interfaces
+  version: 0.5.0
   description: |
-    Προδιαγραφή διεπαφών REST για το σύστημα προεπιλογής προορισμού ανελκυστήρων.
-    Το σύστημα αποτελείται από τέσσερα ανεξάρτητα εκτελέσιμα, το καθένα με δικό του REST server:
+    Common interfaces agreed between the cooperating teams
+    (based on the "REST ENDPOINTS, DTOs field names (JSON) - FIRST EDITION" table).
 
-    | Υποσύστημα            | Πρόθεμα διαδρομών | Προεπιλεγμένη θύρα |
-    |-----------------------|-------------------|--------------------|
-    | Κεντρικό σύστημα      | /api              | 8080               |
-    | Ανελκυστήρας (ένας ανά γράμμα) | /elevator | 8101, 8102, …   |
-    | Διεπαφή χρήστη (μία ανά όροφο) | /ui      | 7001, 7002, …   |
-    | Σύστημα αξιολόγησης   | /eval             | 9000               |
+    Programs and ports:
+    - Central: port 8080.
+    - Elevator: port 8001 + position of its letter (A = 8001, B = 8002, C = 8003, ...).
+      Every elevator runs as its own program, so paths are the same for all elevators
+      and do not contain an elevator id.
+    - UI: has no endpoints. It only sends POST /api/calls to the Central.
 
-    Κανόνες για όλα τα υποσυστήματα:
-    - Όλα τα σώματα είναι JSON (Content-Type: application/json, UTF-8).
-    - Οι όροφοι είναι ακέραιοι. Το ισόγειο είναι ο όροφος 0 και δεν υπάρχουν υπόγεια,
-      άρα οι όροφοι είναι 0 έως highestFloor (από GET /api/config).
-    - Οι ανελκυστήρες αναγνωρίζονται με ένα κεφαλαίο γράμμα, A έως T (2–20 ανελκυστήρες).
-    - Οι χρόνοι είναι ISO-8601 σε UTC, π.χ. 2026-11-04T10:15:30.250Z.
-    - Κάθε σφάλμα επιστρέφεται με το σχήμα Error.
+    Only the names in this file are shared. How each team implements
+    them internally is up to that team.
 
-    Παράμετροι γραμμής εντολών:
+    Changes from 0.4.0:
+    - CommandResponse.passengers is defined as passengers assigned to the elevator and
+      not yet dropped off (whether they are already inside or still waiting to board).
+      It increases by 1 on every POST /api/commands and decreases when a passenger exits.
+      An elevator is full when passengers >= capacity.
+    - CommandResponse.direction (ElevatorDirection) added: UP or DOWN while the
+      elevator has stops above or below its current floor, NONE when it has no stops.
 
-    | Υποσύστημα   | Εντολή |
-    |--------------|--------|
-    | Κεντρικό     | java -jar central.jar --floors 30 --elevators 4 [--port 8080] |
-    | Ανελκυστήρας | java -jar elevator.jar --id C --central http://localhost:8080 [--evaluation http://localhost:9000] [--port 8103] |
-    | Οθόνη ορόφου | java -jar ui.jar --floor 0 --central http://localhost:8080 [--port 7001] |
-    | Αξιολόγηση   | java -jar evaluation.jar --scenario morning-rush.json --central http://localhost:8080 [--port 9000] |
-
-    Ο ανελκυστήρας στέλνει events στην αξιολόγηση μόνο αν δοθεί το --evaluation.
-
-    Αρχείο σεναρίου αξιολόγησης (φάκελος scenarios/, οριστικοποιείται με το πρωτόκολλο αξιολόγησης, 2/12).
-    Τα πεδία έχουν τα ίδια ονόματα με τα σχήματα PassengerRequest, DispatchStrategy και ElevatorParams:
-
-    ```json
-    {
-      "name": "morning-rush",
-      "dispatchStrategy": "GROUP_BY_DESTINATION",
-      "elevatorParams": { "secondsPerFloor": 0.5, "doorOpenSeconds": 1.0, "capacity": 8 },
-      "passengers": [
-        { "atSecond": 0.0, "sourceFloor": 0, "destinationFloor": 12 },
-        { "atSecond": 1.5, "sourceFloor": 0, "destinationFloor": 7 }
-      ]
-    }
-    ```
-    atSecond: δευτερόλεπτα από την έναρξη του σεναρίου που εμφανίζεται ο επιβάτης.
-    dispatchStrategy και elevatorParams: προαιρετικά. Χωρίς dispatchStrategy συγκρίνονται και οι δύο στρατηγικές.
-
-    ΠΡΟΣΧΕΔΙΟ: τα ονόματα πεδίων και διαδρομών είναι προς συμφωνία με την ομάδα συνεργασίας.
-
+    Changes from 0.3.0:
+    - Paths moved under /api; elevator paths no longer contain the elevator id.
+    - Passenger call fields renamed: sourceFloor/destinationFloor -> fromFloor/toFloor.
+    - Command to the elevator: pickupFloor/destinationFloor.
+    - Elevator status renamed to CommandResponse; direction/doors replaced by elevatorState;
+      fields id/floor renamed to elevatorId/currentFloor; capacity added; waiting removed.
 servers:
   - url: http://localhost:8080
-    description: Κεντρικό σύστημα ελέγχου
-  - url: http://localhost:8101
-    description: Ανελκυστήρας A (ένας server ανά ανελκυστήρα)
-  - url: http://localhost:7001
-    description: Διεπαφή χρήστη ορόφου (ένας server ανά οθόνη)
-  - url: http://localhost:9000
-    description: Σύστημα αξιολόγησης
+    description: Central
+  - url: http://localhost:8001
+    description: Elevator A (B = 8002, C = 8003, ...)
 
 tags:
-  - name: central
-    description: Εκτίθεται από το κεντρικό σύστημα ελέγχου
-  - name: elevator
-    description: |
-      Εκτίθεται από το σύστημα ελέγχου κάθε ανελκυστήρα.
-      Ο κινητήρας, οι πόρτες και η οθόνη του θαλάμου υλοποιούνται προς το παρόν ως εσωτερικά
-      μέρη του ανελκυστήρα, χωρίς δική τους διεπαφή REST (ανοιχτό ερώτημα προς τον διδάσκοντα).
-  - name: ui
-    description: Εκτίθεται από τη διεπαφή χρήστη κάθε ορόφου
-  - name: evaluation
-    description: Εκτίθεται από το σύστημα αξιολόγησης
+  - name: Central
+  - name: Elevator
 
 paths:
-
-  # ─────────────────────────── ΚΕΝΤΡΙΚΟ ΣΥΣΤΗΜΑ ───────────────────────────
-
-  /api/config:
-    get:
-      tags: [central]
-      summary: Διαμόρφωση κτιρίου
-      description: Καλείται από όλα τα υποσυστήματα κατά την εκκίνηση.
-      operationId: getConfig
-      responses:
-        '200':
-          description: Η τρέχουσα διαμόρφωση
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/BuildingConfig' }
-    put:
-      tags: [central]
-      summary: Αλλαγή παραμέτρων λειτουργίας
-      description: Χρησιμοποιείται κυρίως από το σύστημα αξιολόγησης πριν από ένα σενάριο.
-      operationId: updateConfig
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/OperationParams' }
-      responses:
-        '200':
-          description: Η νέα διαμόρφωση
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/BuildingConfig' }
-        '400': { $ref: '#/components/responses/BadRequest' }
-
-  /api/requests:
+  /api/calls:
     post:
-      tags: [central]
-      summary: Νέο αίτημα μετακίνησης επιβάτη
-      description: |
-        Καλείται από τη διεπαφή χρήστη όταν ο επιβάτης δηλώσει όροφο προορισμού,
-        ή από το σύστημα αξιολόγησης όταν προσομοιώνει επιβάτες.
-        Το κεντρικό σύστημα αναθέτει ανελκυστήρα και του στέλνει POST /elevator/stops.
-      operationId: createRequest
+      tags: [Central]
+      summary: A passenger calls an elevator (UI -> Central)
+      operationId: createCall
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/PassengerRequest' }
-            example: { sourceFloor: 0, destinationFloor: 12 }
+            schema:
+              $ref: '#/components/schemas/CallRequest'
+            example:
+              fromFloor: 0
+              toFloor: 7
       responses:
         '201':
-          description: Το αίτημα καταχωρήθηκε και ανατέθηκε
+          description: Call accepted; an elevator was assigned
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Assignment' }
-              example: { requestId: r-1042, elevator: C }
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '503': { $ref: '#/components/responses/Unavailable' }
-
-  /api/requests/{requestId}:
-    get:
-      tags: [central]
-      summary: Κατάσταση αιτήματος
-      operationId: getRequest
-      parameters:
-        - $ref: '#/components/parameters/RequestId'
-      responses:
-        '200':
-          description: Το αίτημα
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/RequestStatus' }
-        '404': { $ref: '#/components/responses/NotFound' }
-
-  /api/displays:
-    post:
-      tags: [central]
-      summary: Εγγραφή οθόνης ορόφου
-      description: Η διεπαφή χρήστη δηλώνει σε ποιον όροφο βρίσκεται και πού δέχεται ειδοποιήσεις.
-      operationId: registerDisplay
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/DisplayRegistration' }
-            example: { floor: 0, callbackUrl: 'http://localhost:7001' }
-      responses:
-        '204': { description: Η οθόνη καταχωρήθηκε }
-        '400': { $ref: '#/components/responses/BadRequest' }
+              schema:
+                $ref: '#/components/schemas/CallResponse'
+              example:
+                assignedElevator: B
+        '400':
+          description: Invalid request (floor out of range, or fromFloor equals toFloor)
+        '502':
+          description: An elevator server answered with an error
+        '503':
+          description: An elevator server is not responding, or no elevator is available
 
   /api/elevators:
-    post:
-      tags: [central]
-      summary: Εγγραφή ανελκυστήρα
-      description: Ο ελεγκτής ανελκυστήρα δηλώνει το γράμμα του και τη διεύθυνσή του κατά την εκκίνηση.
-      operationId: registerElevator
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/ElevatorRegistration' }
-            example: { id: A, url: 'http://localhost:8101' }
-      responses:
-        '204': { description: Ο ανελκυστήρας καταχωρήθηκε }
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '409':
-          description: Το γράμμα χρησιμοποιείται ήδη
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Error' }
     get:
-      tags: [central]
-      summary: Κατάσταση και διεύθυνση όλων των ανελκυστήρων
-      description: Χρησιμοποιείται π.χ. από το σύστημα αξιολόγησης για να ρυθμίσει κάθε ανελκυστήρα (PUT /elevator/config στο url του).
+      tags: [Central]
+      summary: State of all elevators (for displays)
       operationId: listElevators
       responses:
         '200':
-          description: Λίστα καταστάσεων
+          description: One entry per elevator
           content:
             application/json:
               schema:
                 type: array
-                items: { $ref: '#/components/schemas/ElevatorInfo' }
+                items:
+                  $ref: '#/components/schemas/CommandResponse'
+              example:
+                - elevatorId: A
+                  elevatorState: IDLE
+                  currentFloor: 0
+                  nextStops: []
+                  passengers: 0
+                  capacity: 8
+                  direction: NONE
+                - elevatorId: B
+                  elevatorState: MOVING
+                  currentFloor: 3
+                  nextStops: [5, 7]
+                  passengers: 4
+                  capacity: 8
+                  direction: UP
+        '503':
+          description: None of the elevator servers is responding (elevators that do not answer are left out of the list)
 
-  /api/elevators/{elevatorId}/status:
-    post:
-      tags: [central]
-      summary: Αναφορά κατάστασης από ανελκυστήρα
-      description: Ο ανελκυστήρας στέλνει την κατάστασή του σε κάθε αλλαγή (όροφος, πόρτες, κατεύθυνση).
-      operationId: reportElevatorStatus
-      parameters:
-        - $ref: '#/components/parameters/ElevatorId'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/ElevatorStatus' }
-      responses:
-        '204': { description: Η κατάσταση καταγράφηκε }
-        '404': { $ref: '#/components/responses/NotFound' }
-
-  # ─────────────────────────── ΑΝΕΛΚΥΣΤΗΡΑΣ ───────────────────────────
-
-  /elevator/status:
+  /api/status:
     get:
-      tags: [elevator]
-      summary: Τρέχουσα κατάσταση του ανελκυστήρα
-      operationId: getElevatorStatus
+      tags: [Elevator]
+      summary: Current state of this elevator (Central -> Elevator)
+      operationId: getStatus
+      servers:
+        - url: http://localhost:8001
       responses:
         '200':
-          description: Η κατάσταση
+          description: Current state
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/ElevatorStatus' }
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+              example:
+                elevatorId: B
+                elevatorState: MOVING
+                currentFloor: 3
+                nextStops: [5, 7]
+                passengers: 4
+                capacity: 8
+                direction: UP
 
-  /elevator/stops:
+  /api/commands:
     post:
-      tags: [elevator]
-      summary: Εντολή στάσης από το κεντρικό σύστημα
-      description: |
-        Το κεντρικό σύστημα προσθέτει στο πρόγραμμα του ανελκυστήρα παραλαβή και αποβίβαση επιβάτη.
-        Τη σειρά των στάσεων την αποφασίζει ο ίδιος ο ανελκυστήρας κατά την κίνησή του.
-      operationId: addStop
+      tags: [Elevator]
+      summary: Give this elevator a passenger to serve (Central -> Elevator)
+      operationId: sendCommand
+      servers:
+        - url: http://localhost:8001
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/StopCommand' }
-            example: { requestId: r-1042, pickupFloor: 0, dropoffFloor: 12 }
-      responses:
-        '202': { description: Η εντολή έγινε δεκτή }
-        '400': { $ref: '#/components/responses/BadRequest' }
-
-  /elevator/config:
-    put:
-      tags: [elevator]
-      summary: Παράμετροι λειτουργίας του ανελκυστήρα
-      operationId: updateElevatorConfig
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/ElevatorParams' }
-      responses:
-        '200':
-          description: Οι νέες παράμετροι
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/ElevatorParams' }
-        '400': { $ref: '#/components/responses/BadRequest' }
-
-  # ─────────────────────────── ΔΙΕΠΑΦΗ ΧΡΗΣΤΗ ───────────────────────────
-
-  /ui/assignments:
-    post:
-      tags: [ui]
-      summary: Αλλαγή ανάθεσης ανελκυστήρα
-      description: Το κεντρικό σύστημα ειδοποιεί την οθόνη ότι ένα αίτημα ανατέθηκε σε άλλον ανελκυστήρα.
-      operationId: notifyAssignment
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/Assignment' }
-      responses:
-        '204': { description: Η οθόνη ενημερώθηκε }
-        '404': { $ref: '#/components/responses/NotFound' }
-
-  /ui/health:
-    get:
-      tags: [ui]
-      summary: Έλεγχος λειτουργίας οθόνης
-      operationId: uiHealth
-      responses:
-        '200':
-          description: Η οθόνη λειτουργεί
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Health' }
-
-  # ─────────────────────────── ΑΞΙΟΛΟΓΗΣΗ ───────────────────────────
-
-  /eval/events:
-    post:
-      tags: [evaluation]
-      summary: Συμβάν από ανελκυστήρα
-      description: |
-        Κάθε ανελκυστήρας αναφέρει παραλαβές, αποβιβάσεις και κινήσεις.
-        Από αυτά υπολογίζονται χρόνος αναμονής, χρόνος διαδρομής και αριθμός στάσεων.
-        Οι χρόνοι αναμονής μετρώνται μόνο για αιτήματα που έστειλε το ίδιο το σύστημα αξιολόγησης
-        από το σενάριό του, γιατί μόνο για αυτά γνωρίζει τη στιγμή δημιουργίας.
-      operationId: postEvent
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/ElevatorEvent' }
+            schema:
+              $ref: '#/components/schemas/CommandRequest'
             example:
-              elevator: C
-              type: PICKUP
-              floor: 0
-              requestId: r-1042
-              timestamp: '2026-11-04T10:15:30.250Z'
+              pickupFloor: 0
+              destinationFloor: 7
       responses:
-        '204': { description: Το συμβάν καταγράφηκε }
-        '400': { $ref: '#/components/responses/BadRequest' }
-
-  /eval/results:
-    get:
-      tags: [evaluation]
-      summary: Αποτελέσματα του τρέχοντος ή του τελευταίου σεναρίου
-      operationId: getResults
-      responses:
-        '200':
-          description: Οι μετρήσεις
+        '201':
+          description: Command accepted; returns the new state
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/EvaluationResults' }
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+        '400':
+          description: Invalid command (floor out of range, or pickupFloor equals destinationFloor)
+        '409':
+          description: |
+            The elevator refuses the command (full or in maintenance).
+            Full means passengers >= capacity.
 
 components:
-
-  parameters:
-    RequestId:
-      name: requestId
-      in: path
-      required: true
-      schema: { type: string, example: r-1042 }
-    ElevatorId:
-      name: elevatorId
-      in: path
-      required: true
-      schema: { $ref: '#/components/schemas/ElevatorLetter' }
-
-  responses:
-    BadRequest:
-      description: Μη έγκυρα δεδομένα, π.χ. όροφος εκτός ορίων
-      content:
-        application/json:
-          schema: { $ref: '#/components/schemas/Error' }
-          example: { error: FLOOR_OUT_OF_RANGE, message: 'Ο όροφος 45 δεν υπάρχει (0–30)' }
-    NotFound:
-      description: Δεν βρέθηκε
-      content:
-        application/json:
-          schema: { $ref: '#/components/schemas/Error' }
-    Unavailable:
-      description: Το υποσύστημα δεν μπορεί να εξυπηρετήσει αυτή τη στιγμή
-      content:
-        application/json:
-          schema: { $ref: '#/components/schemas/Error' }
-
   schemas:
-
-    ElevatorLetter:
-      type: string
-      pattern: '^[A-T]$'
-      example: C
-
-    BuildingConfig:
+    CallRequest:
       type: object
-      required: [lowestFloor, highestFloor, elevators]
+      description: UI -> Central
+      required: [fromFloor, toFloor]
       properties:
-        lowestFloor:  { type: integer, minimum: 0, maximum: 0, example: 0, description: 'Πάντα 0 (ισόγειο, χωρίς υπόγεια)' }
-        highestFloor: { type: integer, minimum: 2, maximum: 199, example: 30 }
-        elevators:
-          type: array
-          minItems: 2
-          maxItems: 20
-          items: { $ref: '#/components/schemas/ElevatorLetter' }
-          example: [A, B, C, D]
-      description: Από 3 έως 200 όροφοι συνολικά (0 έως highestFloor).
-
-    OperationParams:
-      type: object
-      properties:
-        dispatchStrategy:
-          type: string
-          enum: [NEAREST_CAR, GROUP_BY_DESTINATION]
-          example: GROUP_BY_DESTINATION
-        maxPassengersPerTrip: { type: integer, minimum: 1, example: 8 }
-
-    PassengerRequest:
-      type: object
-      required: [sourceFloor, destinationFloor]
-      properties:
-        sourceFloor:      { type: integer, example: 0 }
-        destinationFloor: { type: integer, example: 12 }
-      description: sourceFloor και destinationFloor πρέπει να διαφέρουν και να είναι εντός ορίων.
-
-    Assignment:
-      type: object
-      required: [requestId, elevator]
-      properties:
-        requestId: { type: string, example: r-1042 }
-        elevator:  { $ref: '#/components/schemas/ElevatorLetter' }
-
-    RequestStatus:
-      allOf:
-        - $ref: '#/components/schemas/PassengerRequest'
-        - $ref: '#/components/schemas/Assignment'
-        - type: object
-          required: [state]
-          properties:
-            state:
-              type: string
-              enum: [WAITING, IN_CAR, DELIVERED]
-
-    DisplayRegistration:
-      type: object
-      required: [floor, callbackUrl]
-      properties:
-        floor:       { type: integer, example: 0 }
-        callbackUrl: { type: string, format: uri, example: 'http://localhost:7001' }
-
-    ElevatorRegistration:
-      type: object
-      required: [id, url]
-      properties:
-        id:  { $ref: '#/components/schemas/ElevatorLetter' }
-        url: { type: string, format: uri, example: 'http://localhost:8101' }
-
-    ElevatorStatus:
-      type: object
-      required: [id, floor, direction, doors, nextStops]
-      properties:
-        id:        { $ref: '#/components/schemas/ElevatorLetter' }
-        floor:     { type: integer, example: 4 }
-        direction: { type: string, enum: [UP, DOWN, IDLE] }
-        doors:     { type: string, enum: [OPEN, OPENING, CLOSED, CLOSING] }
-        passengers: { type: integer, minimum: 0, example: 3 }
-        waiting:
+        fromFloor:
           type: integer
-          minimum: 0
-          example: 2
-          description: >-
-            Προαιρετικό (0 αν λείπει). Πόσοι επιβάτες έχουν ανατεθεί στον ανελκυστήρα και περιμένουν
-            να μπουν. Το κεντρικό το χρησιμοποιεί για να μην ομαδοποιεί περισσότερους από όσους χωράνε.
+          description: Floor where the passenger is
+        toFloor:
+          type: integer
+          description: Destination floor
+
+    CallResponse:
+      type: object
+      description: Central -> UI
+      required: [assignedElevator]
+      properties:
+        assignedElevator:
+          type: string
+          description: Letter of the assigned elevator
+          example: B
+
+    CommandRequest:
+      type: object
+      description: Central -> Elevator
+      required: [pickupFloor, destinationFloor]
+      properties:
+        pickupFloor:
+          type: integer
+          description: Floor where the passenger is picked up
+        destinationFloor:
+          type: integer
+          description: Floor where the passenger is dropped off
+
+    CommandResponse:
+      type: object
+      description: Elevator -> Central; the elevator's current state
+      required: [elevatorId, elevatorState, currentFloor, nextStops, passengers, capacity, direction]
+      properties:
+        elevatorId:
+          type: string
+          description: Letter of the elevator
+          example: B
+        elevatorState:
+          $ref: '#/components/schemas/ElevatorState'
+        currentFloor:
+          type: integer
+          description: Current floor
         nextStops:
           type: array
-          items: { type: integer }
-          example: [7, 12]
+          items:
+            type: integer
+          description: Next stops, in order
+        passengers:
+          type: integer
+          minimum: 0
+          description: |
+            Passengers assigned to this elevator and not yet dropped off,
+            whether already inside or still waiting to board.
+            +1 on every accepted POST /api/commands, -1 for every passenger who exits.
+        capacity:
+          type: integer
+          description: Maximum people the elevator holds
+        direction:
+          allOf:
+            - $ref: '#/components/schemas/ElevatorDirection'
+          description: |
+            UP or DOWN while the elevator has stops above or below its current floor;
+            NONE when it has no stops.
 
-    ElevatorInfo:
-      allOf:
-        - $ref: '#/components/schemas/ElevatorStatus'
-        - type: object
-          required: [url]
-          properties:
-            url: { type: string, format: uri, example: 'http://localhost:8103' }
+    ElevatorState:
+      type: string
+      enum: [IDLE, MOVING, DOORS_OPEN, MAINTENANCE]
 
-    StopCommand:
-      type: object
-      required: [requestId, pickupFloor, dropoffFloor]
-      properties:
-        requestId:    { type: string, example: r-1042 }
-        pickupFloor:  { type: integer, example: 0 }
-        dropoffFloor: { type: integer, example: 12 }
-
-    ElevatorParams:
-      type: object
-      properties:
-        secondsPerFloor:   { type: number, minimum: 0.1, example: 1.5 }
-        doorOpenSeconds:   { type: number, minimum: 0.5, example: 3 }
-        capacity:          { type: integer, minimum: 1, example: 10 }
-
-    ElevatorEvent:
-      type: object
-      required: [elevator, type, floor, timestamp]
-      properties:
-        elevator:  { $ref: '#/components/schemas/ElevatorLetter' }
-        type:
-          type: string
-          enum: [ARRIVED, DEPARTED, DOORS_OPENED, DOORS_CLOSED, PICKUP, DROPOFF]
-        floor:     { type: integer, example: 0 }
-        requestId:
-          type: string
-          description: Υποχρεωτικό για PICKUP και DROPOFF
-          example: r-1042
-        timestamp: { type: string, format: date-time }
-
-    EvaluationResults:
-      type: object
-      properties:
-        scenario:              { type: string, example: morning-rush }
-        requestsCompleted:     { type: integer, example: 120 }
-        avgWaitSeconds:        { type: number, example: 18.4 }
-        maxWaitSeconds:        { type: number, example: 61.0 }
-        avgTravelSeconds:      { type: number, example: 34.7 }
-        totalStops:            { type: integer, example: 212 }
-
-    Health:
-      type: object
-      required: [status]
-      properties:
-        status: { type: string, enum: [UP] }
-        floor:  { type: integer, example: 0 }
-
-    Error:
-      type: object
-      required: [error, message]
-      properties:
-        error:
-          type: string
-          description: Σταθερός κωδικός, κεφαλαία με _
-          example: FLOOR_OUT_OF_RANGE
-        message:
-          type: string
-          description: Μήνυμα για άνθρωπο
-          example: 'Ο όροφος 45 δεν υπάρχει (0–30)'
+    ElevatorDirection:
+      type: string
+      description: Used in CommandResponse.direction
+      enum: [UP, DOWN, NONE]
