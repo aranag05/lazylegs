@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: LazyLegs – Destination Dispatch REST API
-  version: 0.2.0-draft
+  version: 0.3.0-draft
   description: |
     Προδιαγραφή διεπαφών REST για το σύστημα προεπιλογής προορισμού ανελκυστήρων.
     Το σύστημα αποτελείται από τέσσερα ανεξάρτητα εκτελέσιμα, το καθένα με δικό του REST server:
@@ -32,19 +32,22 @@ info:
 
     Ο ανελκυστήρας στέλνει events στην αξιολόγηση μόνο αν δοθεί το --evaluation.
 
-    Αρχείο σεναρίου αξιολόγησης (ΠΡΟΣΧΕΔΙΟ, οριστικοποιείται με το πρωτόκολλο αξιολόγησης, 2/12):
+    Αρχείο σεναρίου αξιολόγησης (φάκελος scenarios/, οριστικοποιείται με το πρωτόκολλο αξιολόγησης, 2/12).
+    Τα πεδία έχουν τα ίδια ονόματα με τα σχήματα PassengerRequest, DispatchStrategy και ElevatorParams:
 
     ```json
     {
       "name": "morning-rush",
       "dispatchStrategy": "GROUP_BY_DESTINATION",
+      "elevatorParams": { "secondsPerFloor": 0.5, "doorOpenSeconds": 1.0, "capacity": 8 },
       "passengers": [
-        { "atSecond": 0.0, "from": 0, "to": 12 },
-        { "atSecond": 1.5, "from": 0, "to": 7 }
+        { "atSecond": 0.0, "sourceFloor": 0, "destinationFloor": 12 },
+        { "atSecond": 1.5, "sourceFloor": 0, "destinationFloor": 7 }
       ]
     }
     ```
     atSecond: δευτερόλεπτα από την έναρξη του σεναρίου που εμφανίζεται ο επιβάτης.
+    dispatchStrategy και elevatorParams: προαιρετικά. Χωρίς dispatchStrategy συγκρίνονται και οι δύο στρατηγικές.
 
     ΠΡΟΣΧΕΔΙΟ: τα ονόματα πεδίων και διαδρομών είναι προς συμφωνία με την ομάδα συνεργασίας.
 
@@ -441,6 +444,13 @@ components:
         direction: { type: string, enum: [UP, DOWN, IDLE] }
         doors:     { type: string, enum: [OPEN, OPENING, CLOSED, CLOSING] }
         passengers: { type: integer, minimum: 0, example: 3 }
+        waiting:
+          type: integer
+          minimum: 0
+          example: 2
+          description: >-
+            Προαιρετικό (0 αν λείπει). Πόσοι επιβάτες έχουν ανατεθεί στον ανελκυστήρα και περιμένουν
+            να μπουν. Το κεντρικό το χρησιμοποιεί για να μην ομαδοποιεί περισσότερους από όσους χωράνε.
         nextStops:
           type: array
           items: { type: integer }
