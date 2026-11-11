@@ -1,0 +1,245 @@
+openapi: 3.0.3
+info:
+  title: Destination Dispatch Elevators - Common REST Interfaces
+  version: 0.5.1
+  description: |
+    Common interfaces agreed between the cooperating teams
+    (based on the "REST ENDPOINTS, DTOs field names (JSON) - FIRST EDITION" table).
+
+    Programs and ports:
+    - Central: port 8080.
+    - Elevator: port 8001 + position of its letter (A = 8001, B = 8002, C = 8003, ...).
+      Every elevator runs as its own program, so paths are the same for all elevators
+      and do not contain an elevator id.
+    - UI: has no endpoints. It only sends POST /api/calls to the Central.
+
+    Only the names in this file are shared. How each team implements
+    them internally is up to that team.
+
+    Changes from 0.5.0:
+    - GET /api/elevators: elevators that do not answer are left out of the list;
+      503 only if none of them answers.
+
+    Changes from 0.4.0:
+    - CommandResponse.passengers is defined as passengers assigned to the elevator and
+      not yet dropped off (whether they are already inside or still waiting to board).
+      It increases by 1 on every POST /api/commands and decreases when a passenger exits.
+      An elevator is full when passengers >= capacity.
+    - CommandResponse.direction (ElevatorDirection) added: UP or DOWN while the
+      elevator has stops above or below its current floor, NONE when it has no stops.
+
+    Changes from 0.3.0:
+    - Paths moved under /api; elevator paths no longer contain the elevator id.
+    - Passenger call fields renamed: sourceFloor/destinationFloor -> fromFloor/toFloor.
+    - Command to the elevator: pickupFloor/destinationFloor.
+    - Elevator status renamed to CommandResponse; direction/doors replaced by elevatorState;
+      fields id/floor renamed to elevatorId/currentFloor; capacity added; waiting removed.
+servers:
+  - url: http://localhost:8080
+    description: Central
+  - url: http://localhost:8001
+    description: Elevator A (B = 8002, C = 8003, ...)
+
+tags:
+  - name: Central
+  - name: Elevator
+
+paths:
+  /api/calls:
+    post:
+      tags: [Central]
+      summary: A passenger calls an elevator (UI -> Central)
+      operationId: createCall
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CallRequest'
+            example:
+              fromFloor: 0
+              toFloor: 7
+      responses:
+        '201':
+          description: Call accepted; an elevator was assigned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CallResponse'
+              example:
+                assignedElevator: B
+        '400':
+          description: Invalid request (floor out of range, or fromFloor equals toFloor)
+        '502':
+          description: An elevator server answered with an error
+        '503':
+          description: An elevator server is not responding, or no elevator is available
+
+  /api/elevators:
+    get:
+      tags: [Central]
+      summary: State of all elevators (for displays)
+      description: |
+        The Central asks every elevator (GET /api/status). Elevators that do not answer
+        are left out of the list; 503 only if none of them answers.
+      operationId: listElevators
+      responses:
+        '200':
+          description: One entry per elevator that answers (elevators that do not answer are left out)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CommandResponse'
+              example:
+                - elevatorId: A
+                  elevatorState: IDLE
+                  currentFloor: 0
+                  nextStops: []
+                  passengers: 0
+                  capacity: 8
+                  direction: NONE
+                - elevatorId: B
+                  elevatorState: MOVING
+                  currentFloor: 3
+                  nextStops: [5, 7]
+                  passengers: 4
+                  capacity: 8
+                  direction: UP
+        '503':
+          description: None of the elevator servers is responding
+
+  /api/status:
+    get:
+      tags: [Elevator]
+      summary: Current state of this elevator (Central -> Elevator)
+      operationId: getStatus
+      servers:
+        - url: http://localhost:8001
+      responses:
+        '200':
+          description: Current state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+              example:
+                elevatorId: B
+                elevatorState: MOVING
+                currentFloor: 3
+                nextStops: [5, 7]
+                passengers: 4
+                capacity: 8
+                direction: UP
+
+  /api/commands:
+    post:
+      tags: [Elevator]
+      summary: Give this elevator a passenger to serve (Central -> Elevator)
+      operationId: sendCommand
+      servers:
+        - url: http://localhost:8001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommandRequest'
+            example:
+              pickupFloor: 0
+              destinationFloor: 7
+      responses:
+        '201':
+          description: Command accepted; returns the new state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+        '400':
+          description: Invalid command (floor out of range, or pickupFloor equals destinationFloor)
+        '409':
+          description: |
+            The elevator refuses the command (full or in maintenance).
+            Full means passengers >= capacity.
+
+components:
+  schemas:
+    CallRequest:
+      type: object
+      description: UI -> Central
+      required: [fromFloor, toFloor]
+      properties:
+        fromFloor:
+          type: integer
+          description: Floor where the passenger is
+        toFloor:
+          type: integer
+          description: Destination floor
+
+    CallResponse:
+      type: object
+      description: Central -> UI
+      required: [assignedElevator]
+      properties:
+        assignedElevator:
+          type: string
+          description: Letter of the assigned elevator
+          example: B
+
+    CommandRequest:
+      type: object
+      description: Central -> Elevator
+      required: [pickupFloor, destinationFloor]
+      properties:
+        pickupFloor:
+          type: integer
+          description: Floor where the passenger is picked up
+        destinationFloor:
+          type: integer
+          description: Floor where the passenger is dropped off
+
+    CommandResponse:
+      type: object
+      description: Elevator -> Central; the elevator's current state
+      required: [elevatorId, elevatorState, currentFloor, nextStops, passengers, capacity, direction]
+      properties:
+        elevatorId:
+          type: string
+          description: Letter of the elevator
+          example: B
+        elevatorState:
+          $ref: '#/components/schemas/ElevatorState'
+        currentFloor:
+          type: integer
+          description: Current floor
+        nextStops:
+          type: array
+          items:
+            type: integer
+          description: Next stops, in order
+        passengers:
+          type: integer
+          minimum: 0
+          description: |
+            Passengers assigned to this elevator and not yet dropped off,
+            whether already inside or still waiting to board.
+            +1 on every accepted POST /api/commands, -1 for every passenger who exits.
+        capacity:
+          type: integer
+          description: Maximum people the elevator holds
+        direction:
+          allOf:
+            - $ref: '#/components/schemas/ElevatorDirection'
+          description: |
+            UP or DOWN while the elevator has stops above or below its current floor;
+            NONE when it has no stops.
+
+    ElevatorState:
+      type: string
+      enum: [IDLE, MOVING, DOORS_OPEN, MAINTENANCE]
+
+    ElevatorDirection:
+      type: string
+      description: Used in CommandResponse.direction
+      enum: [UP, DOWN, NONE]
