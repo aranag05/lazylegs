@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Destination Dispatch Elevators - Common REST Interfaces
-  version: 0.5.0
+  version: 0.5.1
   description: |
     Common interfaces agreed between the cooperating teams
     (based on the "REST ENDPOINTS, DTOs field names (JSON) - FIRST EDITION" table).
@@ -15,6 +15,10 @@ info:
 
     Only the names in this file are shared. How each team implements
     them internally is up to that team.
+
+    Changes from 0.5.0:
+    - GET /api/elevators: elevators that do not answer are left out of the list;
+      503 only if none of them answers.
 
     Changes from 0.4.0:
     - CommandResponse.passengers is defined as passengers assigned to the elevator and
@@ -75,10 +79,13 @@ paths:
     get:
       tags: [Central]
       summary: State of all elevators (for displays)
+      description: |
+        The Central asks every elevator (GET /api/status). Elevators that do not answer
+        are left out of the list; 503 only if none of them answers.
       operationId: listElevators
       responses:
         '200':
-          description: One entry per elevator
+          description: One entry per elevator that answers (elevators that do not answer are left out)
           content:
             application/json:
               schema:
@@ -101,7 +108,7 @@ paths:
                   capacity: 8
                   direction: UP
         '503':
-          description: None of the elevator servers is responding (elevators that do not answer are left out of the list)
+          description: None of the elevator servers is responding
 
   /api/status:
     get:
