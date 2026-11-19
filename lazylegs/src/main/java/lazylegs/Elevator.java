@@ -69,3 +69,16 @@ public class Elevator {
         return currentFloor == destinationFloor;
     }
 }
+
+
+public void moveOneFloor() {
+   if (isIdle()) {
+        return; // Elevator is already at the destination floor
+    }
+
+    if (currentFloor < destinationFloor) {
+        currentFloor++;
+    } else {
+        currentFloor--;
+    }
+}
