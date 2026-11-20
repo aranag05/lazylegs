@@ -68,17 +68,18 @@ public class Elevator {
     public boolean isIdle() {
         return currentFloor == destinationFloor;
     }
-}
 
 
-public void moveOneFloor() {
-   if (isIdle()) {
-        return; // Elevator is already at the destination floor
-    }
 
-    if (currentFloor < destinationFloor) {
-        currentFloor++;
-    } else {
-        currentFloor--;
+    public void moveOneFloor() {
+    if (isIdle()) {
+            return; // Elevator is already at the destination floor
+        }
+
+        if (currentFloor < destinationFloor) {
+            currentFloor++;
+        } else {
+            currentFloor--;
+        }
     }
 }
