@@ -21,6 +21,7 @@ public class Elevator {
         this.currentFloor = startFloor;
         this.destinationFloor = startFloor;
     }
+
     public Elevator(char id, int startFloor, int minFloor, int maxFloor) {
         if (id < 'A' || id > 'T') {
             throw new IllegalArgumentException("Elevator id must be A-T, got: " + id);
@@ -37,6 +38,7 @@ public class Elevator {
         this.minFloor = minFloor;
         this.maxFloor = maxFloor;
     }
+
     /** Elevator ID (letter) */
     public char getId() {
         return id;
@@ -51,12 +53,15 @@ public class Elevator {
     public int getDestinationFloor() {
         return destinationFloor;
     }
+
     public int getMinFloor() {
         return minFloor;
     }
+
     public int getMaxFloor() {
         return maxFloor;
     }
+
     public void setDestinationFloor(int destinationFloor) {
         if (destinationFloor < minFloor || destinationFloor > maxFloor) {
             throw new IllegalArgumentException("Destination floor must be within the range of " + minFloor + " and " + maxFloor);
@@ -68,8 +73,6 @@ public class Elevator {
     public boolean isIdle() {
         return currentFloor == destinationFloor;
     }
-
-
 
     public void moveOneFloor() {
     if (isIdle()) {

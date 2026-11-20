@@ -5,8 +5,7 @@ import java.util.Scanner;
  */
 public class App 
 {
-    public static void main( String[] args )
-    {
+    public static void main( String[] args ) {
         //Interface from the user to enter source and destination floor//
         System.out.println("Enter your source floor");
         Scanner scanner = new Scanner(System.in);
