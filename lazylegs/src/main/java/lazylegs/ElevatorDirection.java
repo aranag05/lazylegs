@@ -1,9 +1,7 @@
 package lazylegs;
 
-public class ElevatorDirection {
-   public enum Direction {
+   public enum ElevatorDirection {
         UP,
         DOWN,
         IDLE
     } 
-}

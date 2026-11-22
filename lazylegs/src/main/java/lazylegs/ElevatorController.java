@@ -30,16 +30,26 @@ public class ElevatorController {
             System.out.println("Elevator " + elevator.getId() + " is already at the destination floor " + elevator.getCurrentFloor());
             return;
         }
-    }   
-    ElevatorDirection direction = getDirection();
-    elevator.moveOneFloor();
-    System.out.println("Elevator " + elevator.getId() + " moved " + direction + " to floor " + elevator.getCurrentFloor());
-    if (elevator.isIdle()) {
-        System.out.println("Elevator " + elevator.getId() + " has reached the destination floor " + elevator.getCurrentFloor());
+      
+        ElevatorDirection direction = getDirection();
+        elevator.moveOneFloor();
+        System.out.println("Elevator " + elevator.getId() + " moved " + direction + " to floor " + elevator.getCurrentFloor());
+        if (elevator.isIdle()) {
+            System.out.println("Elevator " + elevator.getId() + " has reached the destination floor " + elevator.getCurrentFloor());
+        }
     }
+
     public void displayStatus() {
         System.out.println("Elevator " + elevator.getId() + " is currently at floor " + elevator.getCurrentFloor() + " with destination floor " + elevator.getDestinationFloor());
         System.out.println("To get there the elevator is moving " + getDirection() + " and is " + (elevator.isIdle() ? "idle" : "not idle"));
     }
         
-}
+
+
+    public Elevator getElevator() { 
+        return elevator;
+    }
+    public boolean isIdle() {
+        return elevator.isIdle();
+    }
+}  
