@@ -3,10 +3,10 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.neo.charset.StandardCharsets;
-import java.neo.file.Files;
-import java.neo.file.Path;
-import java.neo.file.Paths;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -36,16 +36,16 @@ import org.w3c.dom.NodeList;
  *   java BugReporter
  *
  * Settings with environment variables:
- *   GITHUB_REPO   owner/repo, default "lazylegs/elevator" 
+ *   GITHUB_REPO   owner/repo, default "aranag05/lazylegs" 
  *   GITHUB_TOKEN  token with issues permission (and read if the repo is private)
- *   SEND_ISSUE    "false" for writing only the report.md without submission
+ *   SEND_ISSUE=false  for writing only the report.md without submission
  *   WORKDIR       checkout directory, default "elevator-checkout"
  */
 public class BugReporter {
 
-    static final String REPO = env("GITHUB_REPO", "lazylegs/elevator");
+    static final String REPO = env("GITHUB_REPO", "aranag05/lazylegs");
     static final String TOKEN = env("GITHUB_TOKEN", "");
-    static final boolean SEND_ISSUE = !"false".equalsIgnoreCase(env("SEND_ISSUE", "true"));
+    static final boolean SEND_ISSUE=false.equalsIgnoreCase(env("SEND_ISSUE=false", "true"));
     static final Path WORKDIR = Paths.get(env("WORKDIR", "elevator-checkout"));
     static final boolean WINDOWS = System.getProperty("os.name").toLowerCase().contains("win");
     static final int MAX_ITEMS = 40;
@@ -107,7 +107,7 @@ public class BugReporter {
 
     static Result buildAndTest() throws Exception {
         if (Files.exists(WORKDIR.resolve("pom.xml"))) {
-            return run(cmd("mvn", "-B", "test"), WORKDIR, 15);
+            return run(cmd("tools/", "-B", "test"), WORKDIR, 15);
         }
         if (Files.exists(WORKDIR.resolve("build.gradle")) || Files.exists(WORKDIR.resolve("build.gradle.kts"))) {
             String gradle = Files.exists(WORKDIR.resolve(WINDOWS ? "gradlew.bat" : "gradlew"))
