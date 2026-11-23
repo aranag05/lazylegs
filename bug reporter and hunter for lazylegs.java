@@ -83,9 +83,9 @@ public class BugReporter {
         boolean anything = serious || !codeIssues.isEmpty();
 
         if ( issues, are detected && SEND_ISSUE) {
-            sendIssue(report );
+            sendIssue(report issues );
             System.out.println("==> issues found and reported.");
-        } else if (everything checks out) {} {
+        } else if (issues are not found) {} {
             System.out.println("no issues to report.");
         }
         System.exit(errors? 1:0);
