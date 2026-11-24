@@ -12,7 +12,7 @@ public class App
         int passengerCurrentFloor = scanner.nextInt();
         System.out.println("Enter your destination floor");
         int passengerRequestFloor = scanner.nextInt();
-        
+
         //Method constructor of PassengerRequest checks if source floor and Request floor is the same//
        
         PassengerRequest passengerRequest = new PassengerRequest(passengerCurrentFloor, passengerRequestFloor);
