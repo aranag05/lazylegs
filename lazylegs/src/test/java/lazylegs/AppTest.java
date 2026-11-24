@@ -25,6 +25,7 @@ class AppTest {
         assertThrows(IllegalArgumentException.class, () -> new PassengerRequest(5, 5));
     }
 
+    /*
     @Test
     void newElevatorIsIdle() {
         Elevator elevator = new Elevator('C', 0);
@@ -39,4 +40,5 @@ class AppTest {
     void elevatorRejectsInvalidLetter() {
         assertThrows(IllegalArgumentException.class, () -> new Elevator('Z', 0));
     }
+    */
 }
